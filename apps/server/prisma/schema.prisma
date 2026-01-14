@@ -1,0 +1,69 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  conversations Conversation[]
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" or "assistant"
+  content        String       @db.Text
+  agent          String? // Which agent handled this message
+  createdAt      DateTime     @default(now())
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  userId    String
+  status    String // "processing", "in_transit", "delivered", "cancelled"
+  items     String[] // JSON array of items
+  total     Float
+  tracking  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  orderId   String?
+  userId    String
+  amount    Float
+  status    String // "pending", "paid", "refunded"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Refund {
+  id        String   @id @default(cuid())
+  invoiceId String
+  userId    String
+  amount    Float
+  reason    String
+  status    String // "pending", "processing", "completed"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

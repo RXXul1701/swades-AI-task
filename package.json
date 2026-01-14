@@ -1,0 +1,28 @@
+{
+  "name": "ai-support-system",
+  "version": "1.0.0",
+  "description": "AI-powered customer support system with multi-agent architecture",
+  "private": true,
+  "packageManager": "npm@10.9.3",
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "format": "turbo run format"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "prisma": "^7.2.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@prisma/client": "^7.2.0",
+    "openai": "^6.16.0"
+  }
+}
