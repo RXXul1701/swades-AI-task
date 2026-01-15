@@ -30,7 +30,7 @@ export const orderTools: Record<string, any> = {
   fetch_order_details: {
     type: "function",
     function: {
-      description: "Fetch order details by order ID",
+      description:"Fetch full order details. Use ONLY after the user has explicitly provided a valid orderId. Do NOT call this tool if the orderId is missing.",
       name: "fetch_order_details",
       parameters: {
         type: "object",
@@ -45,7 +45,7 @@ export const orderTools: Record<string, any> = {
   check_delivery_status: {
     type: "function",
     function: {
-      description: "Check delivery status and tracking information",
+      description: "Check delivery status and tracking info for an existing order. Use ONLY when the user explicitly asks about delivery or tracking AND has provided an orderId.",
       name: "check_delivery_status",
       parameters: {
         type: "object",
@@ -61,7 +61,7 @@ export const orderTools: Record<string, any> = {
   modify_order: {
     type: "function",
     function: {
-      description: "Modify order details like shipping address or items",
+      description: "Modify an order. Use ONLY after the user has provided orderId and clearly stated what modification they want. If information is missing, ask the user first.",
       name: "modify_order",
       parameters: {
         type: "object",
@@ -78,7 +78,7 @@ export const orderTools: Record<string, any> = {
   cancel_order: {
     type: "function",
     function: {
-      description: "Cancel an order",
+      description: "Cancel an order. Use ONLY after the user confirms cancellation intent AND provides orderId. Never cancel without explicit confirmation.",
       name: "cancel_order",
       parameters: {
         type: "object",

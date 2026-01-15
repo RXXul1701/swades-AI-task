@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { stream } from "hono/streaming";
 import { prisma } from "@/lib/prisma";
 import { RouterAgent } from "@/agents/RouterAgent";
@@ -9,6 +10,8 @@ import { orderTools, executeToolOrder } from "@/agents/tools/order";
 import { billingTools, executeToolBilling } from "@/agents/tools/billing";
 
 const chatRoutes = new Hono();
+
+const MODEL = "llama-3.3-70b-versatile";
 
 const messageSchema = z.object({
   conversationId: z.string().optional(),
@@ -37,8 +40,6 @@ chatRoutes.post("/messages", async (c) => {
     if (intent === "support") agentTools = Object.values(supportTools);
     if (intent === "order") agentTools = Object.values(orderTools);
     if (intent === "billing") agentTools = Object.values(billingTools);
-
-    const needsTools = agentTools.length > 0;
 
     /* ---------- Ensure user ---------- */
     await prisma.user.upsert({
@@ -74,90 +75,24 @@ chatRoutes.post("/messages", async (c) => {
     });
 
     /* ---------- Load history ---------- */
-    const conversationHistory = (
-      await prisma.message.findMany({
-        where: { conversationId: conversation.id },
-        orderBy: { createdAt: "asc" },
-        take: 20,
-      })
-    ).map((m: any) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    const conversationHistory: ChatCompletionMessageParam[] = (
+    await prisma.message.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    })
+  ).map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+
 
     /* ======================================================
-       =============== NO TOOLS → STREAM ====================
-       ====================================================== */
-    if (!needsTools) {
-      c.header("Content-Type", "text/event-stream");
-      c.header("Cache-Control", "no-cache");
-      c.header("Connection", "keep-alive");
-
-      const streamResponse = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          { role: "system", content: selectedAgent.systemPrompt },
-          ...conversationHistory,
-        ],
-        stream: true,
-      });
-
-      return stream(c, async (s) => {
-        let fullResponse = "";
-
-        
-
-        let buffer = "";
-        let lastFlush = Date.now();
-        const FLUSH_INTERVAL = 120; // ms — increase to slow down
-
-        for await (const chunk of streamResponse) {
-        const delta = chunk.choices[0]?.delta?.content;
-        if (!delta) continue;
-
-        buffer += delta;
-        fullResponse += delta;
-
-        const now = Date.now();
-        if (now - lastFlush >= FLUSH_INTERVAL) {
-          await s.write(`data: ${JSON.stringify({ text: buffer })}\n\n`);
-          buffer = "";
-          lastFlush = now;
-        }
-      }
-
-      if (buffer) {
-        await s.write(`data: ${JSON.stringify({ text: buffer })}\n\n`);
-      }
-
-
-
-
-
-        await prisma.message.create({
-          data: {
-            conversationId: conversation!.id,
-            role: "assistant",
-            content: fullResponse,
-            agent: selectedAgent.type,
-          },
-        });
-
-        await prisma.conversation.update({
-          where: { id: conversation!.id },
-          data: { updatedAt: new Date() },
-        });
-
-        await s.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      });
-    }
-
-    /* ======================================================
-       ================= TOOLS FLOW =========================
+       =============== TOOL-FIRST PASS ======================
        ====================================================== */
 
     const response = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: MODEL,
       messages: [
         { role: "system", content: selectedAgent.systemPrompt },
         ...conversationHistory,
@@ -167,7 +102,17 @@ chatRoutes.post("/messages", async (c) => {
     });
 
     const message = response.choices[0].message;
+    //  Never send tool calls to the client
+    if (message.tool_calls?.length) {
+      message.content = null;
+    }   
+
+
     let fullResponse = message.content ?? "";
+
+    /* ======================================================
+       ================= TOOL EXECUTION =====================
+       ====================================================== */
 
     if (message.tool_calls?.length) {
       const toolMessages: any[] = [];
@@ -175,15 +120,31 @@ chatRoutes.post("/messages", async (c) => {
       for (const call of message.tool_calls) {
         if (call.type !== "function") continue;
 
-        const { name, arguments: args } = call.function;
+        const toolName = call.function.name;
+        const parsedArgs = JSON.parse(call.function.arguments || "{}");
+
+        // 🔒 Order ID validation
+        if (
+          toolName === "fetch_order_details" &&
+          !/^ORD-\d{3}$/.test(parsedArgs.orderId)
+        ) {
+          return c.json(
+            {
+              error:
+                "Invalid order ID. Please provide a valid order ID",
+            },
+            400
+          );
+        }
+
         let result: any;
 
         if (intent === "support") {
-          result = await executeToolSupport(name, JSON.parse(args));
+          result = await executeToolSupport(toolName, parsedArgs);
         } else if (intent === "order") {
-          result = await executeToolOrder(name, JSON.parse(args));
+          result = await executeToolOrder(toolName, parsedArgs);
         } else if (intent === "billing") {
-          result = await executeToolBilling(name, JSON.parse(args));
+          result = await executeToolBilling(toolName, parsedArgs);
         } else {
           result = { error: "Unknown tool" };
         }
@@ -196,14 +157,18 @@ chatRoutes.post("/messages", async (c) => {
       }
 
       const followup = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: [
-          { role: "system", content: selectedAgent.systemPrompt },
-          ...conversationHistory,
-          message,
-          ...toolMessages,
-        ],
-      });
+      model: MODEL,
+      messages: [
+        { role: "system", content: selectedAgent.systemPrompt },
+        ...conversationHistory,
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: message.tool_calls,
+        },
+        ...toolMessages,
+      ],
+    });
 
       fullResponse = followup.choices[0].message.content ?? "";
     }
@@ -223,7 +188,10 @@ chatRoutes.post("/messages", async (c) => {
       data: { updatedAt: new Date() },
     });
 
-    /* ---------- Stream final text ---------- */
+    /* ======================================================
+       ================= FINAL STREAM =======================
+       ====================================================== */
+
     c.header("Content-Type", "text/event-stream");
     c.header("Cache-Control", "no-cache");
     c.header("Connection", "keep-alive");

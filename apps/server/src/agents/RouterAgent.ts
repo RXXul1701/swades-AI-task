@@ -1,92 +1,120 @@
 import { agents, AgentType } from "@/agents/index";
 
 export class RouterAgent {
-  private keywords: Record<AgentType, string[]> = {
+  /**
+   * Agent priority order.
+   * Higher index = higher priority when scores tie.
+   */
+  private readonly priority: AgentType[] = [
+    "order",
+    "billing",
+    "support",
+  ];
+
+  /**
+   * Keyword & phrase map.
+   * Phrases are intentionally more specific than generic words.
+   */
+  private readonly keywords: Record<AgentType, string[]> = {
+    order: [
+      "order",
+      "my order",
+      "track order",
+      "tracking",
+      "delivery",
+      "shipping",
+      "where is my",
+      "when will my",
+      "order status",
+      "modify order",
+      "change order",
+      "cancel order",
+    ],
+
+    billing: [
+      "billing",
+      "payment",
+      "invoice",
+      "refund",
+      "charge",
+      "charged",
+      "subscription",
+      "card",
+      "credit card",
+      "debit card",
+      "payment failed",
+      "pricing",
+      "cost",
+      "fee",
+      "coupon",
+      "discount",
+    ],
+
     support: [
-      "help",
       "support",
       "faq",
       "question",
       "issue",
       "problem",
       "troubleshoot",
-      "how",
-      "guide",
-      "tutorial",
       "bug",
       "error",
       "not working",
+      "how do i",
+      "how to",
+      "guide",
+      "tutorial",
     ],
-    order: [
-      "order",
-      "tracking",
-      "delivery",
-      "shipping",
-      "track",
-      "status",
-      "where is my",
-      "when will",
-      "modify",
-      "cancel order",
-      "change order",
-    ],
-    billing: [
-      "payment",
-      "invoice",
-      "refund",
-      "charge",
-      "bill",
-      "subscription",
-      "card",
-      "pay",
-      "price",
-      "cost",
-      "fee",
-      "coupon",
-      "discount",
-    ],
-    
   };
 
+  /**
+   * Classify intent using deterministic keyword scoring.
+   * No AI, no ambiguity.
+   */
   async classifyIntent(query: string): Promise<AgentType> {
-    const lowerQuery = query.toLowerCase();
+    const text = query.toLowerCase();
 
-    // Score each agent based on keyword matches
     const scores: Record<AgentType, number> = {
       support: 0,
       order: 0,
       billing: 0,
     };
 
-    for (const [agentType, keywords] of Object.entries(
-      this.keywords
-    ) as Array<[AgentType, string[]]>) {
-      for (const keyword of keywords) {
-        if (lowerQuery.includes(keyword)) {
-          scores[agentType]++;
+    for (const agentType of Object.keys(this.keywords) as AgentType[]) {
+      for (const phrase of this.keywords[agentType]) {
+        if (text.includes(phrase)) {
+          scores[agentType] += phrase.split(" ").length;
         }
       }
     }
 
-    // Find agent with highest score
     const maxScore = Math.max(...Object.values(scores));
 
+    // No keywords matched → default to support
     if (maxScore === 0) {
-      // Default to support for unknown queries
       return "support";
     }
 
-    return (Object.entries(scores).find(([_, score]) => score === maxScore)?.[0] || "support") as AgentType;
+    // Resolve ties using priority
+    const candidates = (Object.keys(scores) as AgentType[])
+      .filter((agent) => scores[agent] === maxScore);
+
+    for (const preferred of this.priority) {
+      if (candidates.includes(preferred)) {
+        return preferred;
+      }
+    }
+
+    return "support";
   }
 
+  /**
+   * Select the agent configuration (systemPrompt, tools, etc.)
+   */
   selectAgent(agentType: AgentType) {
     const agent = agents.find((a) => a.type === agentType);
 
-    if (!agent) {
-      // Fallback to support agent
-      return agents[0];
-    }
-
-    return agent;
+    // Absolute fallback safety
+    return agent ?? agents.find((a) => a.type === "support")!;
   }
 }

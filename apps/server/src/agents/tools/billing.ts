@@ -38,7 +38,9 @@ export const billingTools: Record<string, any> = {
   get_invoice_details: {
     type: "function",
     function: {
-      description: "Get invoice details",
+      description:
+  "Fetch invoice details. Use ONLY after the user provides either invoiceId or orderId. If neither is provided, ask the user first."
+,
       name: "get_invoice_details",
       parameters: {
         type: "object",
@@ -53,7 +55,9 @@ export const billingTools: Record<string, any> = {
   check_refund_status: {
     type: "function",
     function: {
-      description: "Check refund status",
+      description:
+  "Check refund status. Use ONLY after the user provides refundId or invoiceId. Do NOT call if both are missing."
+,
       name: "check_refund_status",
       parameters: {
         type: "object",
@@ -68,7 +72,9 @@ export const billingTools: Record<string, any> = {
   process_refund: {
     type: "function",
     function: {
-      description: "Process a refund for an invoice",
+      description:
+  "Initiate a refund. Use ONLY after the user explicitly requests a refund and provides invoiceId, amount, and reason."
+,
       name: "process_refund",
       parameters: {
         type: "object",
@@ -85,7 +91,9 @@ export const billingTools: Record<string, any> = {
   get_subscription_info: {
     type: "function",
     function: {
-      description: "Get subscription plan details",
+      description:
+  "Get subscription details. Use ONLY after the user asks about their subscription."
+,
       name: "get_subscription_info",
       parameters: {
         type: "object",
@@ -99,7 +107,7 @@ export const billingTools: Record<string, any> = {
   update_payment_method: {
     type: "function",
     function: {
-      description: "Update payment method for subscription",
+      description: "Update payment method. Use ONLY after the user explicitly requests to update payment details and provides all required fields.",
       name: "update_payment_method",
       parameters: {
         type: "object",

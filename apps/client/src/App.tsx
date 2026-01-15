@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useConversationStore } from './store/conversation'
 
+
 export default function App() {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
@@ -21,6 +23,13 @@ export default function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (!isLoading) {
+      inputRef.current?.focus()
+    }
+  }, [isLoading])
+
 
   const handleSendMessage = async (e: React.FormEvent) => {
     const userMessageId = `user-${Date.now()}`;
@@ -51,6 +60,9 @@ export default function App() {
     setInput('')
     setIsLoading(true)
     setIsTyping(true)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
 
     try {
       const res = await fetch(
@@ -140,13 +152,19 @@ export default function App() {
     <div className="app">
       <div className="sidebar">
         <div className="sidebar-header">
-          <h1>🤖 AI Support</h1>
-          <button 
+          
+          <h1 className="app-title">Resolve AI</h1>
+
+          <button
             className="new-chat-btn"
-            onClick={() => setCurrentConversation(null)}
-          >
+            onClick={async () => {
+            const userId = "user-1";
+            const conv = await createConversation(userId, "New conversation");
+            setCurrentConversation(conv.id);
+          }}>
             + New Chat
-          </button>
+        </button>
+
         </div>
 
         <div className="conversations">
@@ -190,6 +208,7 @@ export default function App() {
 
         <form className="message-form" onSubmit={handleSendMessage}>
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}

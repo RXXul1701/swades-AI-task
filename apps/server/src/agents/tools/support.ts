@@ -4,7 +4,7 @@ export const supportTools: Record<string, any> = {
   query_conversation_history: {
     type: "function",
     function: {
-      description: "Query conversation history for FAQs and past support tickets",
+      description:"INTERNAL SUPPORT TOOL. Use ONLY when explicitly instructed by the system prompt. NEVER call this tool to infer order, billing, or user intent.",
       name: "query_conversation_history",
       parameters: {
         type: "object",
@@ -97,7 +97,10 @@ export async function executeToolSupport(toolName: string, toolInput: any): Prom
       ],
     };
 
-    return faqs[topic.toLowerCase()] || faqs.shipping;
+    if (!faqs[topic.toLowerCase()]) {
+      return { error: "Unknown FAQ topic", availableTopics: Object.keys(faqs) };
+    }
+
   }
 
   if (toolName === "create_support_ticket") {
